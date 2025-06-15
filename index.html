@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisasi Interaktif Respons Dopamin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Calm Harmony (Neutral Tones with Purposeful Accents) -->
+    <!-- Application Structure Plan: A single-page dashboard designed for direct comparison. The layout uses a responsive grid. The left side (or top on mobile) contains the activity selection controls, categorized for clarity ('Pemicu Tinggi' vs. 'Pemulihan Sehat'). The main area is dedicated to the dynamic line chart. Below the chart, an information panel provides context-sensitive scientific explanations for the selected activity. This structure was chosen because the primary user goal is to compare activities and understand the 'why' behind their effects. Separating controls from the visualization and context panel creates an intuitive, uncluttered user flow that encourages exploration and learning. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Dopamine response curves for 19 activities.
+        - Goal: Compare the nature (spike vs. sustained) and consequence (crash vs. stability) of different dopamine responses and inform the user about the underlying science.
+        - Viz/Presentation Method: An interactive multi-line chart using Chart.js on a Canvas element. Textual explanations are presented in a dedicated, dynamic info panel.
+        - Interaction: Users click buttons to toggle activity curves on the chart. The last-clicked activity's details populate the info panel. A 'Reset' button clears the visualization.
+        - Justification: This method provides immediate visual feedback and direct comparison, which is the most effective way to communicate the report's core message. The info panel adds critical educational value, linking the visual representation to scientific research.
+        - Library/Method: Chart.js for visualization, Vanilla JS for interactivity and state management.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 45vh; /* Adjusted for smaller mobile screens */
+        }
+        @media (min-width: 640px) {
+             .chart-container {
+                height: 50vh;
+             }
+        }
+        @media (min-width: 1024px) {
+            .chart-container {
+                height: 65vh;
+                max-height: 600px;
+            }
+        }
+        .info-card {
+            transition: all 0.3s ease-in-out;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        .info-card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .control-btn {
+            transition: all 0.2s ease-in-out;
+            text-align: left;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        .control-btn.active {
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+    <div class="container mx-auto px-4 py-6 md:py-12">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-2">Pola Respons Dopamin</h1>
+            <p class="max-w-3xl mx-auto text-base md:text-lg text-slate-600">Bandingkan bagaimana berbagai aktivitas memengaruhi tingkat dopamin Anda dari waktu ke waktu.</p>
+        </header>
+
+        <main class="flex flex-col lg:flex-row gap-8">
+            
+            <aside class="w-full lg:w-1/3 lg:order-2">
+                <div class="lg:sticky top-8 space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-rose-600 mb-3 border-b-2 border-rose-200 pb-2">📉 Pemicu Dopamin Tinggi</h2>
+                        <div id="high-dopamine-controls" class="flex flex-col space-y-2"></div>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-teal-600 mb-3 border-b-2 border-teal-200 pb-2">📈 Pemulihan Sehat</h2>
+                        <div id="healthy-recovery-controls" class="flex flex-col space-y-2"></div>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="w-full lg:w-2/3 lg:order-1">
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-lg">
+                    <div class="chart-container">
+                        <canvas id="dopamineChart"></canvas>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-center">
+                     <button id="reset-chart-btn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors">Reset Grafik</button>
+                </div>
+
+                <div id="info-panel-wrapper" class="mt-8">
+                    <div id="info-panel" class="bg-white p-6 rounded-2xl shadow-lg info-card">
+                        <h3 id="info-title" class="text-2xl font-bold text-slate-900 mb-3">Selamat Datang!</h3>
+                        <div id="info-content" class="prose max-w-none text-slate-600">
+                            <p>Pilih salah satu aktivitas dari panel kontrol untuk melihat visualisasi kurva dopaminnya dan membaca penjelasan ilmiahnya di sini. Anda dapat memilih beberapa aktivitas sekaligus untuk membandingkannya secara langsung di grafik.</p>
+                            <p>Aplikasi ini didasarkan pada prinsip-prinsip neurosains seperti <strong>Teori Proses Lawan</strong>, yang menjelaskan mengapa lonjakan dopamin yang besar sering kali diikuti oleh penurunan di bawah garis dasar, yang dapat menyebabkan perasaan mengidam atau cemas. Sebaliknya, aktivitas pemulihan yang sehat cenderung meningkatkan dopamin secara berkelanjutan tanpa "kejatuhan" yang drastis.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+        
+        <footer class="text-center mt-12 text-slate-500 text-sm">
+            <p>Dibuat berdasarkan sintesis penelitian neurosains. Kurva bersifat konseptual untuk tujuan edukasi.</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const activityData = {
+                socialMedia: {
+                    label: "Media Sosial",
+                    category: 'high',
+                    color: '#ef4444',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Media sosial mengeksploitasi sistem imbalan otak melalui jadwal imbalan variabel intermiten, validasi sosial, dan kebaruan yang tak ada habisnya. Algoritma AI dirancang untuk menciptakan "siklus dopamin" dari keinginan, pencarian, dan imbalan yang tidak dapat diprediksi (suka, komentar, konten baru), yang menjadikannya sangat adiktif.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan serangkaian lonjakan mikro yang cepat dan tidak dapat diprediksi, bukan satu puncak tunggal. Ini mewakili aliran hadiah kecil yang konstan. Setelah aktivitas berhenti, terjadi penurunan yang dalam dan berkepanjangan di bawah garis dasar, yang mewakili keadaan defisit dopamin, kecemasan, dan suasana hati yang rendah.</p>`,
+                    data: (baseline) => {
+                        let points = [{x: 0, y: baseline}];
+                        for (let i = 1; i <= 60; i++) { // 1 jam scrolling
+                            let spike = baseline + 120 + Math.random() * 60 - 30;
+                            points.push({x: i, y: spike});
+                        }
+                        points.push({x: 61, y: baseline * 0.4}); // Crash
+                        for (let i = 62; i <= 360; i++) {
+                            points.push({x: i, y: baseline * 0.4 + (i-61)*0.05 });
+                        }
+                        return points;
+                    }
+                },
+                pornography: {
+                    label: "Pornografi",
+                    category: 'high',
+                    color: '#7e22ce',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Pornografi internet menyediakan rangsangan supernormal yang membanjiri jalur imbalan dengan dopamin, jauh melebihi respons terhadap pertemuan seksual alami. Kebaruan, variasi, dan aksesibilitas yang tak terbatas secara dramatis memperkuat efek ini, yang dapat menyebabkan desensitisasi terhadap imbalan di dunia nyata.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan puncak yang sangat tinggi dan tajam, secara signifikan lebih tinggi daripada imbalan alami. Puncak ini diikuti oleh lembah yang sangat dalam dan berkepanjangan, yang dapat menyebabkan perasaan malu, cemas, dan ketidakpuasan dengan keintiman di dunia nyata.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 5, y: baseline * 3.5}, {x: 30, y: baseline * 4.0}, {x: 35, y: baseline * 0.3}, {x: 180, y: baseline * 0.4}, {x: 360, y: baseline * 0.7}
+                    ]
+                },
+                bingeEating: {
+                    label: "Makan Berlebihan Makanan Cepat Saji",
+                    category: 'high',
+                    color: '#f97316',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Makanan yang sangat lezat (tinggi gula, lemak, dan garam) bertindak sebagai rangsangan supernormal. Perilaku ini dapat menjadi kebiasaan, didorong oleh isyarat lingkungan dan emosional. Otak melepaskan dopamin sebagai respons, tetapi paparan berulang dapat menumpulkan sensitivitas reseptor, yang membutuhkan konsumsi lebih banyak untuk efek yang sama.</p><h3>Rasional Grafis:</h3><p>Puncaknya tinggi dan bertahan selama episode makan berlebihan. Ini diikuti oleh lembah yang dalam, terkait dengan perasaan bersalah, malu, dan ketidaknyamanan fisik yang sering mengikuti episode tersebut.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 10, y: baseline * 2.5}, {x: 45, y: baseline * 2.2}, {x: 50, y: baseline * 0.5}, {x: 240, y: baseline * 0.7}, {x: 360, y: baseline * 0.9}
+                    ]
+                },
+                videoGames: {
+                    label: "Permainan Video",
+                    category: 'high',
+                    color: '#84cc16',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Permainan video dirancang untuk memberikan aliran dopamin melalui putaran umpan balik yang cepat, tujuan yang jelas, dan imbalan yang tidak dapat diprediksi (misalnya, item langka, kemenangan). Ini dapat menyebabkan keadaan hiper-gairah (hyperarousal) dan toleransi dari waktu ke waktu.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan peningkatan berkelanjutan selama sesi permainan, dengan lonjakan fasa tambahan untuk pencapaian dalam game. Lembah pasca-puncak sedang hingga dalam dapat bermanifestasi sebagai iritabilitas atau kegelisahan saat tidak bermain.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 15, y: baseline * 1.5}, {x: 45, y: baseline * 2.0}, {x: 60, y: baseline * 2.5}, {x: 90, y: baseline * 2.2}, {x: 120, y: baseline * 2.8}, {x: 121, y: baseline * 0.6}, {x: 360, y: baseline * 0.8}
+                    ]
+                },
+                onlineShopping: {
+                    label: "Belanja Daring",
+                    category: 'high',
+                    color: '#0ea5e9',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Belanja daring memanfaatkan sistem dopamin terutama melalui antisipasi imbalan. Tindakan menjelajah, menemukan penawaran, dan mengklik "beli" memicu pelepasan dopamin yang signifikan, seringkali lebih besar daripada saat benar-benar menerima barang tersebut.</p><h3>Rasional Grafis:</h3><p>Puncaknya sedang dan terjadi selama fase antisipasi dan pembelian. Seringkali diikuti oleh lembah dangkal dari "penyesalan pembeli", yang ironisnya dapat memicu siklus belanja lain untuk mendapatkan kembali "rasa senang" tersebut.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 10, y: baseline * 1.8}, {x: 20, y: baseline * 1.5}, {x: 21, y: baseline * 0.8}, {x: 120, y: baseline * 0.9}, {x: 360, y: baseline * 0.95}
+                    ]
+                },
+                bingeWatching: {
+                    label: "Menonton Acara Maraton",
+                    category: 'high',
+                    color: '#6366f1',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Menonton secara maraton menciptakan aliran dopamin yang berkelanjutan dengan membenamkan pemirsa dalam narasi yang menarik. Akhir cerita yang menggantung (cliffhanger) berfungsi sebagai pemicu kuat untuk segera mencari imbalan berikutnya (episode selanjutnya).</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan dataran tinggi (plateau) yang berkelanjutan daripada puncak yang tajam. Setelah maraton berakhir, terjadi lembah sedang, yang sering digambarkan sebagai "melankolis pasca-serial," yang dapat berlangsung selama berjam-jam.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 20, y: baseline * 1.5}, {x: 120, y: baseline * 2.0}, {x: 180, y: baseline * 2.2}, {x: 181, y: baseline * 0.6}, {x: 360, y: baseline * 0.85}
+                    ]
+                },
+                drugsAlcohol: {
+                    label: "Narkoba & Alkohol",
+                    category: 'high',
+                    color: '#1f2937',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Zat-zat ini secara langsung dan artifisial membajak jalur imbalan, menyebabkan pelepasan dopamin dalam jumlah yang jauh melebihi imbalan alami mana pun (hingga 1000%+). Paparan kronis menyebabkan neuroadaptasi yang parah, menurunkan produksi dopamin alami dan reseptor secara drastis.</p><h3>Rasional Grafis:</h3><p>Puncak yang sangat cepat, beramplitudo ekstrem, dan berkepanjangan secara artifisial. Ini diikuti oleh lembah yang sangat dalam dan parah, yang mewakili penarikan diri (withdrawal) dan keadaan defisit dopamin yang menyiksa.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 5, y: baseline * 8}, {x: 60, y: baseline * 10}, {x: 120, y: baseline * 6}, {x: 121, y: baseline * 0.1}, {x: 360, y: baseline * 0.3}
+                    ]
+                },
+                gambling: {
+                    label: "Berjudi/Berdagang",
+                    category: 'high',
+                    color: '#eab308',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Perjudian adalah contoh utama dari jadwal imbalan variabel intermiten. Ketidakpastian hasil, dikombinasikan dengan potensi kemenangan besar (atau "nyaris menang"), menciptakan lonjakan dopamin antisipatif yang sangat kuat.</p><h3>Rasional Grafis:</h3><p>Kurva ditandai oleh lonjakan yang sangat tinggi, tajam, dan tidak dapat diprediksi. Kekalahan menciptakan lembah yang sangat dalam, yang mendorong perilaku "mengejar kerugian" sebagai upaya putus asa untuk kembali ke puncak dopamin.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 10, y: baseline * 0.5}, {x: 15, y: baseline * 3.5}, {x: 20, y: baseline * 0.4}, {x: 35, y: baseline * 0.3}, {x: 40, y: baseline * 4.0}, {x: 41, y: baseline * 0.2}, {x: 360, y: baseline * 0.6}
+                    ]
+                },
+                 endlessTexting: {
+                    label: "Aplikasi Kencan/Pesan",
+                    category: 'high',
+                    color: '#ec4899',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Aplikasi ini menggabungkan imbalan variabel intermiten (kapan Anda akan mendapat balasan atau "match"?) dengan validasi sosial. Setiap notifikasi memberikan lonjakan dopamin kecil, memperkuat perilaku memeriksa ponsel secara kompulsif.</p><h3>Rasional Grafis:</h3><p>Kurva terdiri dari serangkaian lonjakan intermiten yang sedang hingga tinggi. Di antara interaksi, terdapat lembah sedang yang dapat bermanifestasi sebagai kecemasan atau "takut ketinggalan" (FOMO).</p>`,
+                    data: (baseline) => {
+                        let points = [{x: 0, y: baseline}];
+                        for (let i = 1; i <= 120; i+=15) {
+                            points.push({x: i, y: baseline + (Math.random() > 0.4 ? 100 : -20) });
+                            points.push({x: i+5, y: baseline});
+                        }
+                         points.push({x: 121, y: baseline * 0.7});
+                         for (let i = 122; i <= 360; i++) {
+                            points.push({x: i, y: baseline * 0.7 + (i-122)*0.05 });
+                        }
+                        return points;
+                    }
+                },
+                onlineValidation: {
+                    label: "Mengejar Validasi Daring",
+                    category: 'high',
+                    color: '#d946ef',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Ini adalah pencarian persetujuan eksternal melalui media digital. Mekanismenya identik dengan media sosial: setiap "suka" atau komentar positif berfungsi sebagai imbalan sosial yang tidak dapat diprediksi yang memicu pelepasan dopamin.</p><h3>Rasional Grafis:</h3><p>Puncaknya tinggi dan singkat, membutuhkan aliran validasi yang konstan untuk dipertahankan. Lembah yang dalam terjadi saat validasi yang diharapkan tidak diterima, atau saat membandingkan diri dengan orang lain.</p>`,
+                     data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 2, y: baseline*2.5}, {x: 10, y: baseline*0.6}, {x: 20, y: baseline*0.7}, {x: 22, y: baseline*2.2}, {x: 30, y: baseline*0.5}, {x: 360, y: baseline*0.8}
+                    ]
+                },
+                exercise: {
+                    label: "Olahraga",
+                    category: 'healthy',
+                    color: '#14b8a6',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Olahraga meningkatkan sintesis dopamin dan ketersediaan reseptornya. Ini bukan hanya efek sementara; olahraga teratur dapat membuat sistem imbalan lebih sensitif terhadap imbalan alami, meningkatkan suasana hati dan motivasi secara keseluruhan.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan peningkatan bertahap ke dataran tinggi yang berkelanjutan selama aktivitas. Yang terpenting, tidak ada kejatuhan. Tingkat dopamin kembali ke atau bahkan sedikit di atas garis dasar sebelumnya, yang mencerminkan peningkatan fungsi dan ketahanan sistem.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 15, y: baseline * 1.5}, {x: 30, y: baseline * 1.8}, {x: 60, y: baseline * 2.0}, {x: 65, y: baseline * 1.6}, {x: 180, y: baseline * 1.4}, {x: 360, y: baseline * 1.1}
+                    ]
+                },
+                coldExposure: {
+                    label: "Paparan Dingin",
+                    category: 'healthy',
+                    color: '#38bdf8',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Paparan dingin yang disengaja (misalnya, mandi air dingin) menyebabkan pelepasan norepinefrin dan dopamin yang signifikan dan berkelanjutan. Ini adalah bentuk stres positif (eustress) yang kuat.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan puncak awal yang tajam saat tubuh merespons guncangan, diikuti oleh dataran tinggi yang sangat panjang dan berkelanjutan yang bertahan selama berjam-jam setelahnya. Tidak ada lembah di bawah garis dasar, menghasilkan peningkatan suasana hati dan fokus yang bertahan lama.</p>`,
+                     data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 1, y: baseline * 3.0}, {x: 5, y: baseline * 3.5}, {x: 120, y: baseline * 2.5}, {x: 240, y: baseline * 2.0}, {x: 360, y: baseline * 1.5}
+                    ]
+                },
+                morningSunlight: {
+                    label: "Sinar Matahari Pagi",
+                    category: 'healthy',
+                    color: '#fbbf24',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Paparan sinar matahari alami di pagi hari membantu mengatur ritme sirkadian. Ini memicu pelepasan dopamin dan serotonin yang lembut, yang berkontribusi pada peningkatan suasana hati, kewaspadaan, dan fokus sepanjang hari.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan kenaikan yang lembut dan berkelanjutan. Efek utamanya adalah pengaturan ritme sirkadian, yang mengarah pada suasana hati yang lebih stabil dan tidur yang lebih baik, bukan "rasa senang" yang intens.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 15, y: baseline * 1.4}, {x: 60, y: baseline * 1.5}, {x: 180, y: baseline * 1.2}, {x: 360, y: baseline * 1.05}
+                    ]
+                },
+                deepWork: {
+                    label: "Kerja Mendalam/Fokus",
+                    category: 'healthy',
+                    color: '#4f46e5',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Dopamin tidak menghasilkan euforia selama kerja mendalam, melainkan berfungsi sebagai neuromodulator yang memungkinkan konsentrasi berkelanjutan. Imbalan (dan pelepasan dopamin yang lebih besar) datang setelah tugas selesai, memperkuat nilai dari pekerjaan yang terfokus.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan dataran tinggi yang sangat rendah dan berkelanjutan yang memungkinkan konsentrasi. Tidak ada kejatuhan; sebaliknya, penyelesaian tugas yang berhasil mengarah pada perasaan pencapaian dan kepuasan.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 30, y: baseline * 1.2}, {x: 90, y: baseline * 1.4}, {x: 91, y: baseline * 1.6}, {x: 120, y: baseline * 1.1 }, {x: 360, y: baseline * 1.0}
+                    ]
+                },
+                meditation: {
+                    label: "Meditasi",
+                    category: 'healthy',
+                    color: '#22c55e',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Praktik Perhatian Terfokus telah terbukti secara langsung meningkatkan pelepasan dopamin (hingga 65%) di striatum. Seiring waktu, ini dapat menyebabkan peningkatan kadar dopamin tonik (dasar), yang meningkatkan regulasi emosional dan ketahanan.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan peningkatan sedang yang tenang dan berkelanjutan. Praktik teratur dikaitkan dengan peningkatan garis dasar dopamin, yang mengarah pada kesejahteraan yang lebih baik secara keseluruhan tanpa adanya kejatuhan.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 10, y: baseline * 1.4}, {x: 20, y: baseline * 1.65}, {x: 30, y: baseline * 1.5}, {x: 180, y: baseline * 1.2}, {x: 360, y: baseline * 1.1}
+                    ]
+                },
+                 longWalks: {
+                    label: "Jalan Kaki Jauh",
+                    category: 'healthy',
+                    color: '#10b981',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Jalan kaki, terutama di alam, adalah bentuk olahraga ringan yang melepaskan berbagai neurokimia yang meningkatkan suasana hati. Berjalan di lanskap baru dapat secara khusus meningkatkan dopamin, karena otak menandai kebaruan.</p><h3>Rasional Grafis:</h3><p>Peningkatan kesejahteraan yang lembut, bukan "rasa senang" yang intens. Kurva menunjukkan kenaikan bertahap yang lembut dan berkelanjutan, yang mengarah ke perasaan tenang dan stres yang berkurang setelahnya.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 20, y: baseline * 1.3}, {x: 60, y: baseline * 1.6}, {x: 120, y: baseline * 1.4}, {x: 360, y: baseline * 1.05}
+                    ]
+                },
+                 sexWithConnection: {
+                    label: "Seks dengan Koneksi",
+                    category: 'healthy',
+                    color: '#f43f5e',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Meskipun seks melepaskan dopamin, konteks koneksi emosional secara fundamental mengubah profilnya. Pelepasan dopamin diimbangi oleh oksitosin ("hormon ikatan"), yang mendorong perasaan keintiman, kepercayaan, dan keterikatan.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan kenaikan yang kuat dan berkelanjutan, tetapi tidak ada kejatuhan yang tajam seperti pada pornografi. Sebaliknya, kembali ke garis dasar dengan perasaan ikatan dan kepuasan yang bertahan lama.</p>`,
+                     data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 10, y: baseline * 1.8}, {x: 20, y: baseline * 2.5}, {x: 25, y: baseline * 3.0}, {x: 45, y: baseline * 1.5}, {x: 180, y: baseline * 1.3}, {x: 360, y: baseline * 1.1}
+                    ]
+                },
+                readingBook: {
+                    label: "Membaca Buku Fisik",
+                    category: 'healthy',
+                    color: '#78716c',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Membaca adalah aktivitas dopamin rendah yang membutuhkan perhatian berkelanjutan. Ini secara aktif melawan keinginan untuk stimulasi tinggi dan gratifikasi instan yang ditawarkan oleh media digital.</p><h3>Rasional Grafis:</h3><p>Kurva menunjukkan dataran tinggi keterlibatan yang sangat rendah dan berkelanjutan. Ini meningkatkan kemampuan untuk fokus dan mengurangi keinginan akan aktivitas dopamin tinggi.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline}, {x: 20, y: baseline * 1.1}, {x: 60, y: baseline * 1.2}, {x: 120, y: baseline * 1.15}, {x: 360, y: baseline * 1.0}
+                    ]
+                },
+                fasting: {
+                    label: "Puasa",
+                    category: 'healthy',
+                    color: '#a16207',
+                    description: `<h3>Mekanisme Neurobiologis:</h3><p>Efek puasa bersifat kompleks. Ini bukan "pendorong" dopamin sederhana, melainkan modulator dari sistem dopamin. Puasa akut dapat mengubah dinamika pelepasan dopamin, yang berpotensi mengatur ulang sensitivitas sistem terhadap imbalan.</p><h3>Rasional Grafis:</h3><p>Kurva ini tidak menunjukkan lonjakan sederhana. Ini digambarkan sebagai modulator garis dasar, yang menunjukkan perubahan dalam dinamika sistem daripada peningkatan langsung.</p>`,
+                    data: (baseline) => [
+                        {x: 0, y: baseline * 0.95}, {x: 360, y: baseline * 1.05}
+                    ]
+                }
+            };
+
+            const highDopamineControls = document.getElementById('high-dopamine-controls');
+            const healthyRecoveryControls = document.getElementById('healthy-recovery-controls');
+            const infoTitle = document.getElementById('info-title');
+            const infoContent = document.getElementById('info-content');
+            const infoPanel = document.getElementById('info-panel');
+            const resetButton = document.getElementById('reset-chart-btn');
+            
+            let activeActivities = new Set();
+            const baseline = 100;
+
+            const ctx = document.getElementById('dopamineChart').getContext('2d');
+            const dopamineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: 'Waktu (Menit)',
+                                font: { size: 14 }
+                            },
+                             min: 0,
+                             max: 360
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Tingkat Dopamin (%)',
+                                font: { size: 14 }
+                            },
+                            min: 0
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        annotation: {
+                            annotations: {
+                                baseline: {
+                                    type: 'line',
+                                    yMin: baseline,
+                                    yMax: baseline,
+                                    borderColor: 'rgb(51, 65, 85, 0.5)',
+                                    borderWidth: 2,
+                                    borderDash: [6, 6],
+                                    label: {
+                                        content: 'Garis Dasar',
+                                        enabled: true,
+                                        position: 'start',
+                                        yAdjust: -10,
+                                        backgroundColor: 'rgba(51, 65, 85, 0.5)'
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    elements: {
+                        point: {
+                            radius: 0
+                        },
+                        line: {
+                            tension: 0.1,
+                            borderWidth: 3
+                        }
+                    }
+                }
+            });
+
+            const createButton = (id, activity) => {
+                const button = document.createElement('button');
+                button.id = `btn-${id}`;
+                button.textContent = activity.label;
+                button.dataset.activityId = id;
+
+                let baseClasses = 'control-btn w-full text-sm font-semibold py-2 rounded-lg shadow-sm ';
+                if(activity.category === 'high') {
+                    button.className = baseClasses + 'bg-white text-rose-700 ring-1 ring-inset ring-rose-300 hover:bg-rose-50';
+                } else {
+                    button.className = baseClasses + 'bg-white text-teal-700 ring-1 ring-inset ring-teal-300 hover:bg-teal-50';
+                }
+
+                button.addEventListener('click', () => toggleActivity(id));
+                return button;
+            };
+
+            const toggleActivity = (id) => {
+                const button = document.getElementById(`btn-${id}`);
+                if (activeActivities.has(id)) {
+                    activeActivities.delete(id);
+                    button.classList.remove('active');
+                    if (activityData[id].category === 'high') {
+                        button.classList.remove('bg-rose-500', 'text-white', 'ring-rose-500');
+                    } else {
+                         button.classList.remove('bg-teal-500', 'text-white', 'ring-teal-500');
+                    }
+                    
+                    dopamineChart.data.datasets = dopamineChart.data.datasets.filter(ds => ds.label !== activityData[id].label);
+                } else {
+                    activeActivities.add(id);
+                    button.classList.add('active');
+                    if (activityData[id].category === 'high') {
+                        button.classList.add('bg-rose-500', 'text-white', 'ring-rose-500');
+                    } else {
+                         button.classList.add('bg-teal-500', 'text-white', 'ring-teal-500');
+                    }
+
+                    const newDataset = {
+                        label: activityData[id].label,
+                        data: activityData[id].data(baseline),
+                        borderColor: activityData[id].color,
+                        backgroundColor: activityData[id].color + '33',
+                        fill: false,
+                    };
+                    dopamineChart.data.datasets.push(newDataset);
+                }
+                dopamineChart.update();
+                updateInfoPanel(id);
+            };
+
+            const updateInfoPanel = (id) => {
+                infoPanel.classList.remove('visible');
+                setTimeout(() => {
+                    if (activeActivities.size === 0) {
+                        infoTitle.textContent = "Pilih Sebuah Aktivitas";
+                        infoContent.innerHTML = "<p>Pilih salah satu aktivitas dari panel kontrol untuk melihat visualisasi kurva dopaminnya dan membaca penjelasan ilmiahnya di sini.</p>";
+                    } else {
+                        const activity = activityData[id];
+                        infoTitle.textContent = activity.label;
+                        infoContent.innerHTML = activity.description;
+                    }
+                    infoPanel.classList.add('visible');
+                }, 150);
+            };
+            
+            const resetChart = () => {
+                 activeActivities.forEach(id => {
+                    const button = document.getElementById(`btn-${id}`);
+                    button.classList.remove('active');
+                    if (activityData[id].category === 'high') {
+                        button.classList.remove('bg-rose-500', 'text-white', 'ring-rose-500');
+                    } else {
+                         button.classList.remove('bg-teal-500', 'text-white', 'ring-teal-500');
+                    }
+                 });
+                activeActivities.clear();
+                dopamineChart.data.datasets = [];
+                dopamineChart.update();
+                
+                infoPanel.classList.remove('visible');
+                setTimeout(() => {
+                    infoTitle.textContent = "Grafik Direset";
+                    infoContent.innerHTML = "<p>Pilih aktivitas baru untuk memulai lagi. Bandingkan 'Pemicu Tinggi' dengan 'Pemulihan Sehat' untuk melihat perbedaan dampaknya pada kesejahteraan Anda.</p>";
+                    infoPanel.classList.add('visible');
+                }, 150);
+            }
+
+            Object.entries(activityData).forEach(([id, activity]) => {
+                const button = createButton(id, activity);
+                if (activity.category === 'high') {
+                    highDopamineControls.appendChild(button);
+                } else {
+                    healthyRecoveryControls.appendChild(button);
+                }
+            });
+            
+            resetButton.addEventListener('click', resetChart);
+
+        });
+    </script>
+</body>
+</html>
